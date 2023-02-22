@@ -1,8 +1,10 @@
 import logging
 import os
 import numpy as np
-import tensorflow as tf
-from tensorflow.contrib import layers
+import tf_slim as slim
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+from tensorflow.keras import layers
 from utils import getLogger
 
 # set logger
@@ -68,7 +70,7 @@ class MemoryHeadGroup():
         assert self.is_write
 
         # erase_vector/erase_signal: Shape (batch_size, value_memory_state_dim)
-        erase_signal = layers.fully_connected(
+        erase_signal = slim.fully_connected(
             inputs=embedded_content_vector, 
             num_outputs=self.memory_state_dim,
             scope=self.name+'/EraseOperation',
@@ -77,7 +79,7 @@ class MemoryHeadGroup():
         )
 
         # add_vector/add_signal: Shape (batch_size, value_memory_state_dim)
-        add_signal = layers.fully_connected(
+        add_signal = slim.fully_connected(
             inputs=embedded_content_vector,
             num_outputs=self.memory_state_dim,
             scope=self.name+'/AddOperation',

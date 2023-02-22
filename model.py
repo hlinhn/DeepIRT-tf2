@@ -1,8 +1,9 @@
 import logging
 import numpy as np 
-import tensorflow as tf
-from tensorflow.contrib import slim
-from tensorflow.contrib import layers
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+import tf_slim as slim
+from tensorflow.keras import layers
 from memory import DKVMN
 from utils import getLogger
 
@@ -136,7 +137,7 @@ class DeepIRTModel(object):
             # Build the feature vector -- summary_vector
             mastery_level_prior_difficulty = tf.concat([self.read_content, q], 1)
 
-            self.summary_vector = layers.fully_connected(
+            self.summary_vector = slim.fully_connected(
                 inputs=mastery_level_prior_difficulty,
                 num_outputs=self.args.summary_vector_output_dim,
                 scope='SummaryOperation',
@@ -146,7 +147,7 @@ class DeepIRTModel(object):
             logger.debug("summary_vector: {}".format(self.summary_vector))
 
             # Calculate the student ability level from summary vector
-            student_ability = layers.fully_connected(
+            student_ability = slim.fully_connected(
                 inputs=self.summary_vector,
                 num_outputs=1,
                 scope='StudentAbilityOutputLayer',
@@ -155,7 +156,7 @@ class DeepIRTModel(object):
             )
 
             # Calculate the question difficulty level from the question embedding
-            question_difficulty = layers.fully_connected(
+            question_difficulty = slim.fully_connected(
                 inputs=q,
                 num_outputs=1,
                 scope='QuestionDifficultyOutputLayer',
