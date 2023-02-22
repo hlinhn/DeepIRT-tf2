@@ -2,7 +2,8 @@ import argparse
 import datetime
 import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import os
 from load_data import DataLoader
 from model import DeepIRTModel
