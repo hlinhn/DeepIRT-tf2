@@ -9,6 +9,11 @@ def compute_auc(all_label, all_pred):
     #fpr, tpr, thresholds = metrics.roc_curve(all_label, all_pred, pos_label=1.0)
     return metrics.roc_auc_score(all_label, all_pred)
 
+def compute_confusion_mat(all_label, all_pred):
+    all_pred[all_pred > 0.5] = 1.0
+    all_pred[all_pred <= 0.5] = 0.0
+    return metrics.confusion_matrix(all_label, all_pred)
+
 def compute_accuracy(all_label, all_pred):
     all_pred[all_pred > 0.5] = 1.0
     all_pred[all_pred <= 0.5] = 0.0
@@ -40,7 +45,7 @@ def run_model(model, args, q_data, qa_data, mode='train'):
 
     if args.show:
         bar = ProgressBar(mode, max=training_step)
-        
+
     pred_list = list()
     label_list = list()
     for step in range(training_step):
@@ -73,15 +78,15 @@ def run_model(model, args, q_data, qa_data, mode='train'):
 
         label_list.append(label_flat[index_flat])
         pred_list.append(pred_flat[index_flat])
-    
+
     if args.show:
         bar.finish()
-    
+
     all_label = np.concatenate(label_list, axis=0)
     all_pred = np.concatenate(pred_list, axis=0)
 
     auc = compute_auc(all_label, all_pred)
     accuracy = compute_accuracy(all_label, all_pred)
     loss = binaryEntropy(all_label, all_pred)
-
-    return loss, accuracy, auc
+    confusion_mat = compute_confusion_mat(all_label, all_pred)
+    return loss, accuracy, auc, confusion_mat, all_pred, all_label

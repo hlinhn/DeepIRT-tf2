@@ -14,24 +14,26 @@ class ModelConfigFactory():
             return SyntheticConfig(args).get_args()
         elif args.dataset == 'fsai':
             return FSAIConfig(args).get_args()
+        elif 'ednet' in args.dataset:
+            return EdnetConfig(args).get_args()
         else:
             raise ValueError("The '{}' is not available".format(args.dataset))
 
 
 class ModelConfig():
     def __init__(self, args):
+        self.args = args
         self.default_setting = self.get_default_setting()
         self.init_time = datetime.datetime.now().strftime("%Y-%m-%dT%H%M")
 
-        self.args = args
         self.args_dict = vars(self.args)
         for arg in self.args_dict.keys():
-            self._set_attribute_value(arg, self.args_dict[arg])  
+            self._set_attribute_value(arg, self.args_dict[arg])
 
         self.set_result_log_dir()
         self.set_checkpoint_dir()
-        self.set_tensorboard_dir() 
-    
+        self.set_tensorboard_dir()
+
     def get_args(self):
         return self.args
 
@@ -43,7 +45,7 @@ class ModelConfig():
         self.args_dict[arg] = arg_value \
             if arg_value is not None \
             else self.default_setting.get(arg)
-    
+
     def _get_model_config_str(self):
         model_config = 'b' + str(self.args.batch_size) \
                     + '_m' + str(self.args.memory_size) \
@@ -69,7 +71,7 @@ class ModelConfig():
             self.init_time
         )
         self._set_attribute_value('checkpoint_dir', checkpoint_dir)
-    
+
     def set_tensorboard_dir(self):
         tensorboard_dir = os.path.join(
             './tensorboard',
@@ -78,7 +80,42 @@ class ModelConfig():
             self.init_time
         )
         self._set_attribute_value('tensorboard_dir', tensorboard_dir)
-        
+
+
+class EdnetConfig(ModelConfig):
+    def get_default_setting(self):
+        ednet_keys = ["ednet_ssub", "ednet_slazy", "ednet_slazy_25", "ednet_sactive", "ednet_ssuper", "ednet_s300"]
+        filename = ["KT1_subset_seq", "KT1_lazy_15k_seq", "KT1_lazy_25K_seq", "KT1_active_15K_seq", "KT1_super_active_15K_seq", "Top_300_questions_seq"]
+        subset_size = [12233, 9022, 9782, 12275, 12273, 300]
+        sub_data_name = dict([(k, v) for k, v in zip(ednet_keys, filename)])
+        sub_qnum = dict([(k, v) for k, v in zip(ednet_keys, subset_size)])
+
+        default_setting = {
+            # training setting
+            'n_epochs': 10,
+            'batch_size': 32,
+            'train': True,
+            'show': True,
+            'learning_rate': 0.003,
+            'max_grad_norm': 10.0,
+            'use_ogive_model': False,
+            # dataset param
+            'seq_len': 200,
+            'n_questions': sub_qnum[self.args.dataset],
+            'data_dir': '/content/gdrive/MyDrive/ednet_generated',
+            'data_name': sub_data_name[self.args.dataset],
+            # DKVMN param
+            'memory_size': 50,
+            'key_memory_state_dim': 50,
+            'value_memory_state_dim': 100,
+            'summary_vector_output_dim': 50,
+            # parameter for the SA Network and KCD network
+            'student_ability_layer_structure': None,
+            'question_difficulty_layer_structure': None,
+            'discimination_power_layer_structure': None
+        }
+        return default_setting
+
 
 class Assist2009Config(ModelConfig):
     def get_default_setting(self):

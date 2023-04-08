@@ -17,15 +17,16 @@ logger = getLogger('Deep-IRT-model')
 # argument parser
 parser = argparse.ArgumentParser()
 # dataset can be assist2009, assist2015, statics2011, synthetic, fsai
-parser.add_argument('--dataset', default='assist2009', 
+parser.add_argument('--dataset', default='assist2009',
                     help="'assist2009', 'assist2015', 'statics2011', 'synthetic', 'fsai'")
-                    
-parser.add_argument('--save', type=bool, default=False)
+
+parser.add_argument('--save', type=bool, default=True)
+parser.add_argument('--resume', type=str, default="")
 parser.add_argument('--cpu', type=bool, default=False)
 parser.add_argument('--n_epochs', type=int, default=None)
 parser.add_argument('--batch_size', type=int, default=None)
 parser.add_argument('--train', type=bool, default=None)
-parser.add_argument('--show', type=bool, default=None)    
+parser.add_argument('--show', type=bool, default=None)
 parser.add_argument('--learning_rate', type=float, default=None)
 parser.add_argument('--max_grad_norm', type=float, default=None)
 parser.add_argument('--use_ogive_model', type=bool, default=False)
@@ -51,27 +52,28 @@ for directory in [args.checkpoint_dir, args.result_log_dir, args.tensorboard_dir
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def train(model, train_q_data, train_qa_data, 
+def train(model, train_q_data, train_qa_data,
             valid_q_data, valid_qa_data, result_log_path, args):
     saver = tf.train.Saver()
     best_loss = 1e6
     best_acc = 0.0
     best_auc = 0.0
     best_epoch = 0.0
+    best_conf = []
 
     with open(result_log_path, 'w') as f:
         result_msg = "{},{},{},{},{},{},{}\n".format(
-            'epoch', 
+            'epoch',
             'train_auc', 'train_accuracy', 'train_loss',
             'valid_auc', 'valid_accuracy', 'valid_loss'
         )
         f.write(result_msg)
     for epoch in range(args.n_epochs):
-        
-        train_loss, train_accuracy, train_auc = run_model(
+
+        train_loss, train_accuracy, train_auc, train_conf, train_pred, train_label = run_model(
             model, args, train_q_data, train_qa_data, mode='train'
         )
-        valid_loss, valid_accuracy, valid_auc = run_model(
+        valid_loss, valid_accuracy, valid_auc, valid_conf, valid_pred, valid_label = run_model(
             model, args, valid_q_data, valid_qa_data, mode='valid'
         )
 
@@ -79,15 +81,17 @@ def train(model, train_q_data, train_qa_data,
         msg = "\n[Epoch {}/{}] Training result:      AUC: {:.2f}%\t Acc: {:.2f}%\t Loss: {:.4f}".format(
             epoch+1, args.n_epochs, train_auc*100, train_accuracy*100, train_loss
         )
+        msg += "\n" + str(train_conf)
         msg += "\n[Epoch {}/{}] Validation result:    AUC: {:.2f}%\t Acc: {:.2f}%\t Loss: {:.4f}".format(
             epoch+1, args.n_epochs, valid_auc*100, valid_accuracy*100, valid_loss
         )
+        msg += "\n" + str(valid_conf)
         logger.info(msg)
 
         # write epoch result
         with open(result_log_path, 'a') as f:
             result_msg = "{},{},{},{},{},{},{}\n".format(
-                epoch, 
+                epoch,
                 train_auc, train_accuracy, train_loss,
                 valid_auc, valid_accuracy, valid_loss
             )
@@ -105,13 +109,14 @@ def train(model, train_q_data, train_qa_data,
             ]
         )
         model.tensorboard_writer.add_summary(tf_summary, epoch)
-        
+
         # save the model if the loss is lower
         if valid_loss < best_loss:
             best_loss = valid_loss
             best_acc = valid_accuracy
             best_auc = valid_auc
             best_epoch = epoch+1
+            best_conf = valid_conf
 
             if args.save:
                 model_dir = "ep{:03d}-auc{:.0f}-acc{:.0f}".format(
@@ -120,7 +125,10 @@ def train(model, train_q_data, train_qa_data,
                 model_name = "Deep-IRT"
                 save_path = os.path.join(args.checkpoint_dir, model_dir, model_name)
                 saver.save(sess=model.sess, save_path=save_path)
-
+                saved_data_name = os.path.join(args.checkpoint_dir, model_dir, "prediction.npz")
+                saved_data_file = open(saved_data_name, 'wb')
+                np.savez(saved_data_file, train_pred=train_pred, train_label=train_label, valid_pred=valid_pred, valid_label=valid_label)
+                saved_data_file.close()
                 logger.info("Model improved. Save model to {}".format(save_path))
             else:
                 logger.info("Model improved.")
@@ -130,7 +138,7 @@ def train(model, train_q_data, train_qa_data,
         best_epoch, best_auc*100, best_acc*100, best_loss
     )
     logger.info(msg)
-    return best_auc, best_acc, best_loss
+    return best_auc, best_acc, best_loss, best_conf
 
 def cross_validation():
     tf.set_random_seed(1234)
@@ -138,35 +146,73 @@ def cross_validation():
     config.gpu_options.allow_growth = True
     if args.cpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
     aucs, accs, losses = list(), list(), list()
-    for i in range(5):
-        tf.reset_default_graph()
-        logger.info("Cross Validation {}".format(i+1))
-        result_csv_path = os.path.join(args.result_log_dir, 'fold-{}-result'.format(i)+'.csv')
+    for i in range(1):
+        if args.resume == "":
+            tf.reset_default_graph()
+            logger.info("Cross Validation {}".format(i+1))
+            result_csv_path = os.path.join(args.result_log_dir, 'fold-{}-result'.format(i)+'.csv')
 
-        with tf.Session(config=config) as sess:
-            data_loader = DataLoader(args.n_questions, args.seq_len, ',')
-            model = DeepIRTModel(args, sess, name="Deep-IRT")
-            sess.run(tf.global_variables_initializer())
-            if args.train:
-                train_data_path = os.path.join(args.data_dir, args.data_name+'_train{}.csv'.format(i))
-                valid_data_path = os.path.join(args.data_dir, args.data_name+'_valid{}.csv'.format(i))
-                logger.info("Reading {} and {}".format(train_data_path, valid_data_path))
+            with tf.Session(config=config) as sess:
+                data_loader = DataLoader(args.n_questions, args.seq_len, ',')
+                model = DeepIRTModel(args, sess, name="Deep-IRT")
+                sess.run(tf.global_variables_initializer())
+                if args.train:
+                    train_data_path = os.path.join(args.data_dir, args.data_name+'_train.csv')
+                    valid_data_path = os.path.join(args.data_dir, args.data_name+'_valid.csv')
+                    logger.info("Reading {} and {}".format(train_data_path, valid_data_path))
 
-                train_q_data, train_qa_data = data_loader.load_data(train_data_path)
-                valid_q_data, valid_qa_data = data_loader.load_data(valid_data_path)
+                    train_q_data, train_qa_data = data_loader.load_data(train_data_path)
+                    valid_q_data, valid_qa_data = data_loader.load_data(valid_data_path)
 
-                auc, acc, loss = train(
-                    model, 
-                    train_q_data, train_qa_data, 
-                    valid_q_data, valid_qa_data, 
-                    result_log_path=result_csv_path,
-                    args=args
-                )
+                    auc, acc, loss, conf = train(
+                        model,
+                        train_q_data, train_qa_data,
+                        valid_q_data, valid_qa_data,
+                        result_log_path=result_csv_path,
+                        args=args
+                    )
 
-                aucs.append(auc)
-                accs.append(acc)
-                losses.append(loss)
+                    aucs.append(auc)
+                    accs.append(acc)
+                    losses.append(loss)
+        else:
+            tf.reset_default_graph()
+            loaded_graph = tf.Graph()
+            new_saver = tf.train.Saver()
+            logger.info("Cross Validation {}".format(i+1))
+            result_csv_path = os.path.join(args.result_log_dir, 'fold-{}-result'.format(i)+'.csv')
+
+            with tf.Session(config=config,graph=loaded_graph) as sess:
+                # sess.run(tf.global_variables_initializer())
+                new_saver = tf.train.import_meta_graph(os.path.join(args.resume, 'Deep-IRT.meta'))
+                new_saver.restore(sess, tf.train.latest_checkpoint(args.resume))
+
+                data_loader = DataLoader(args.n_questions, args.seq_len, ',')
+                # model = DeepIRTModel(args, sess, name="Deep-IRT")
+                if args.train:
+                    train_data_path = os.path.join(args.data_dir, args.data_name+'_train.csv')
+                    valid_data_path = os.path.join(args.data_dir, args.data_name+'_valid.csv')
+                    logger.info("Reading {} and {}".format(train_data_path, valid_data_path))
+
+                    train_q_data, train_qa_data = data_loader.load_data(train_data_path)
+                    valid_q_data, valid_qa_data = data_loader.load_data(valid_data_path)
+
+                    auc, acc, loss, conf = train(
+                        model,
+                        train_q_data, train_qa_data,
+                        valid_q_data, valid_qa_data,
+                        result_log_path=result_csv_path,
+                        args=args
+                    )
+
+                    aucs.append(auc)
+                    accs.append(acc)
+                    losses.append(loss)
+            saver = tf.train.import_meta_graph(os.path.join(args.resume, 'Deep-IRT.meta'))
+            saver.restore(sess, tf.train.latest_checkpoint(args.resume))
+
 
     cross_validation_msg = "Cross Validation Result:\n"
     cross_validation_msg += "AUC: {:.2f} +/- {:.2f}\n".format(np.average(aucs)*100, np.std(aucs)*100)

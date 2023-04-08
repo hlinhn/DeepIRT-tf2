@@ -1,4 +1,4 @@
-import numpy as np 
+import numpy as np
 from utils import getLogger
 
 class DataLoader():
@@ -6,7 +6,7 @@ class DataLoader():
         self.separate_char = separate_char
         self.n_questions = n_questions
         self.seq_len = seq_len
-    
+
     def load_data(self, path):
         q_data = []
         qa_data = []
@@ -14,20 +14,21 @@ class DataLoader():
             for line_idx, line in enumerate(f):
                 line = line.strip()
                 # skip the number of sequence
-                if line_idx%3 == 0:
+                if line_idx%5 == 0 or line_idx%5 == 1 or line_idx%5 == 4:
                     continue
                 # handle question_line
-                elif line_idx%3 == 1:
+                elif line_idx%5 == 2:
                     q_tag_list = line.split(self.separate_char)
                 # handle answer-line
-                elif line_idx%3 == 2:
+                elif line_idx%5 == 3:
                     a_tag_list = line.split(self.separate_char)
-
+                    if len(line) == 0:
+                        continue
                     # find the number of split for this sequence
                     n_split = len(q_tag_list) // self.seq_len
                     if len(q_tag_list) % self.seq_len != 0:
                         n_split += 1
-                    
+
                     for k in range(n_split):
                         # temporary container for each sequence
                         q_container = list()
@@ -55,4 +56,3 @@ class DataLoader():
             qa_data_array[i, :len(_qa_data)] = _qa_data
 
         return q_data_array, qa_data_array
-        

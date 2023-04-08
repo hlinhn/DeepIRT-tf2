@@ -1,5 +1,5 @@
 import logging
-import numpy as np 
+import numpy as np
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import tf_slim as slim
@@ -58,18 +58,18 @@ class DeepIRTModel(object):
                 'value_memory_matrix', [self.args.memory_size, self.args.value_memory_state_dim],
 				initializer=tf.truncated_normal_initializer(stddev=0.1)
             )
-        
+
         # Boardcast value-memory matrix to Shape (batch_size, memory_size, memory_value_state_dim)
         init_value_memory = tf.tile(  # tile the number of value-memory by the number of batch
             tf.expand_dims(init_value_memory, 0),  # make the batch-axis
-            tf.stack([self.args.batch_size, 1, 1])  
+            tf.stack([self.args.batch_size, 1, 1])
         )
         logger.debug("Shape of init_value_memory = {}".format(init_value_memory.get_shape()))
         logger.debug("Shape of init_key_memory = {}".format(init_key_memory.get_shape()))
 
         # Initialize DKVMN
         self.memory = DKVMN(
-            memory_size=self.args.memory_size, 
+            memory_size=self.args.memory_size,
             key_memory_state_dim=self.args.key_memory_state_dim,
             value_memory_state_dim=self.args.value_memory_state_dim,
             init_key_memory=init_key_memory,
@@ -105,7 +105,7 @@ class DeepIRTModel(object):
         )
         logger.debug("Shape of sliced_q_embed_data[0]: {}".format(sliced_q_embed_data[0].get_shape()))
         logger.debug("Shape of sliced_qa_embed_data[0]: {}".format(sliced_qa_embed_data[0].get_shape()))
-        
+
         pred_z_values = list()
         student_abilities = list()
         question_difficulties = list()
@@ -125,7 +125,7 @@ class DeepIRTModel(object):
             # Attention, correlation_weight: Shape (batch_size, memory_size)
             self.correlation_weight = self.memory.attention(embedded_query_vector=q)
             logger.debug("correlation_weight: {}".format(self.correlation_weight))
-            
+
             # Read process, read_content: (batch_size, value_memory_state_dim)
             self.read_content = self.memory.read(correlation_weight=self.correlation_weight)
             logger.debug("read_content: {}".format(self.read_content))
@@ -133,7 +133,7 @@ class DeepIRTModel(object):
             # Write process, new_memory_value: Shape (batch_size, memory_size, value_memory_state_dim)
             self.new_memory_value = self.memory.write(self.correlation_weight, qa, reuse=reuse_flag)
             logger.debug("new_memory_value: {}".format(self.new_memory_value))
-            
+
             # Build the feature vector -- summary_vector
             mastery_level_prior_difficulty = tf.concat([self.read_content, q], 1)
 
@@ -169,9 +169,9 @@ class DeepIRTModel(object):
             pred_z_values.append(pred_z_value)
             student_abilities.append(student_ability)
             question_difficulties.append(question_difficulty)
-        
+
         self.pred_z_values = tf.reshape(
-            tf.stack(pred_z_values, axis=1), 
+            tf.stack(pred_z_values, axis=1),
             [self.args.batch_size, self.args.seq_len]
         )
         self.student_abilities = tf.reshape(
@@ -225,11 +225,11 @@ class DeepIRTModel(object):
         # cross entropy loss
         cross_entropy = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=filtered_logits, 
+                logits=filtered_logits,
                 labels=filtered_label
             )
         )
-        
+
         self.loss = cross_entropy
 
     def _create_optimizer(self):
@@ -258,8 +258,8 @@ class DeepIRTModel(object):
             total_size += var_size
             total_bytes += var_bytes
             model_msg += ' '.join(
-                [var.name, 
-                tensor_description(var), 
+                [var.name,
+                tensor_description(var),
                 '[%d, bytes: %d]' % (var_size, var_bytes)]
             )
             model_msg += '\n'
