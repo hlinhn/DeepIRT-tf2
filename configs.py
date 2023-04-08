@@ -102,7 +102,7 @@ class EdnetConfig(ModelConfig):
             # dataset param
             'seq_len': 200,
             'n_questions': sub_qnum[self.args.dataset],
-            'data_dir': '/content/gdrive/MyDrive/ednet_generated',
+            'data_dir': '/kaggle/input/top-300',
             'data_name': sub_data_name[self.args.dataset],
             # DKVMN param
             'memory_size': 50,
